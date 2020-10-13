@@ -1,0 +1,67 @@
+version: '1.0'
+services:
+  - name: db
+    type: mariadb
+    version: 10.4
+    configuration: StandAlone
+    database: pimcore
+    username: pimcore
+    userPassword: null
+    password: null
+    ports:
+      - 3306
+    remoteAccess: false
+    comments:
+      userPassword: Password for user "pimcore"
+    deployTo:
+      - pimcore
+
+  - name: pimcore
+    type: docker
+    image: pimcore/pimcore
+    version: PHP7.3-fpm
+    ports:
+      - 9000
+    remoteAccess: false
+    env:
+      PIMCORE_INSTALL_MYSQL_HOST_SOCKET: "{{=service('db').getMasterAlias()}}"
+      PIMCORE_INSTALL_MYSQL_USERNAME: "{{=service('db').get('username')}}"
+      PIMCORE_INSTALL_MYSQL_DATABASE: "{{=service('db').get('database')}}"
+      PIMCORE_INSTALL_MYSQL_PASSWORD: "{{=service('db').get('userPassword')}}"
+      PIMCORE_INSTALL_ADMIN_USERNAME: null
+      PIMCORE_INSTALL_ADMIN_PASSWORD: null
+      COMPOSER_CACHE_DIR: /tmp/.composer
+    volumes:
+      - directory: /var/www/html/web
+    volumesUID: 33
+    initialCommands: |
+      cd /var/www/html/web
+      COMPOSER_MEMORY_LIMIT=-1 composer create-project pimcore/skeleton my-project
+      cd my-project
+      ./vendor/bin/pimcore-install --no-interaction
+      chown -R www-data:www-data ./
+    configFiles:
+      - dest: /usr/local/etc/php/conf.d/99-extra.ini
+        src: ./configs/99-extra.ini
+    deployTo:
+      - pimcore
+
+  - name: web
+    type: nginx
+    version: 1.19
+    ports:
+      - 80
+      - 443
+    remoteAccess: true
+    serviceFiles:
+      - name: pimcore
+        static: true
+        src: ./configs/pimcore.conf
+    deployTo:
+      - pimcore
+
+hosts:
+  - name: pimcore
+    requirements:
+      cores: 1
+      memory: 2
